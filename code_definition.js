@@ -248,5 +248,5 @@ const fs = require('fs').promises;
 		DEFINED_MORSE_CODES: DEFINED_MORSE_CODES,
 		EN: DEFINED_MORSE_CODES_EN,
 		WABUN: DEFINED_MORSE_CODES_WABUN,
-	}));
+	}, null, 2));
 })();
