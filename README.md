@@ -6,6 +6,9 @@ Denoising / Recognizing CW morse code with machine learning
 SNR=2dB (noise bandwidth = 500Hz)
 ![denoising sample](./docs/denoise.png)
 
+SNR=10dB (noise bandwidth = 500Hz)
+![denoising sample](./docs/denoise-10dB.png)
+
 # Resources
 
  * [LoadData-Sample.ipynb](./LoadData-Sample.ipynb) Example of loading training wav with labels (Jupyter notebook)
