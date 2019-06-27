@@ -8,6 +8,6 @@ SNR=2dB (noise bandwidth = 500Hz)
 
 # Resources
 
- * [LoadData-Sample.ipynb][./LoadData-Sample.ipynb] Example of loading training wav with labels (Jupyter notebook)
+ * [LoadData-Sample.ipynb](./LoadData-Sample.ipynb) Example of loading training wav with labels (Jupyter notebook)
  * [morselib.py](./morselib.py) some utility functions
  * [denoise/train.py](./denoise/train.py) example denoising training script (keras)
