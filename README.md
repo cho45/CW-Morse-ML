@@ -27,6 +27,8 @@ Labels data is compressed and saved as PNG. Its x-dimension (width) is same as w
  * 1: morse id : This represents morse code id of keying. These ids are defined in DEFINED_MORSE_CODES of [DEFINITION.json](./DEFINITION.json).
  * 2: recognizing by human timing: This represents morse code id which is recognized by human timing. 
 
+See also [morselib.py#L189]( ./morselib.py#L189 )
+
 ```
 Label example:
 ( 0x05 means ".-")
