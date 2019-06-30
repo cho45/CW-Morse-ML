@@ -95,23 +95,24 @@ snr = (0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 40)
 wpm = (20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 35, 40)
 config = list(itertools.product(wpm, snr))
 
-total = phase_count * len(config)
+total = phase_count * len(config) * 2
 n = 0
-for phase in range(phase_count):
-    for wpm, snr in config:
-        n += 1
-        init_random_seed(snr << 24 | wpm << 16 | phase)
-        text = " ".join(  string_random('[KMURESNAPTLWI.JZ=FOY,VG5/Q92H38B?47C1D60X]+') for n in range(20) )
-        # print(wpm, snr, text)
-        tone = 600
-        executor.submit(
-                write_file, 
-                text,
-                "/tmp/dataset/cw-train/{:03d}-{}dB-{}wpm-{}Hz".format(phase, snr, wpm, tone),
-                maxlength=30,
-                snr=snr,
-                wpm=wpm,
-                tone=tone,
-                n=n,
-                total=total,
-                )
+for ti, ty in enumerate( ('train', 'test') ):
+    for phase in range(phase_count):
+        for wpm, snr in config:
+            n += 1
+            init_random_seed(ti << 31 | snr << 24 | wpm << 16 | phase)
+            text = " ".join(  string_random('[KMURESNAPTLWI.JZ=FOY,VG5/Q92H38B?47C1D60X]+') for n in range(20) )
+            # print(wpm, snr, text)
+            tone = 600
+            executor.submit(
+                    write_file, 
+                    text,
+                    "/tmp/dataset/cw-{}/{:03d}-{}dB-{}wpm-{}Hz".format(ty, phase, snr, wpm, tone),
+                    maxlength=30,
+                    snr=snr,
+                    wpm=wpm,
+                    tone=tone,
+                    n=n,
+                    total=total,
+                    )

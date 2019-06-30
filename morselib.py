@@ -18,6 +18,7 @@ from PIL import Image
 
 
 DEFINITION = json.loads(pathlib.Path(__file__).absolute().parent.joinpath("DEFINITION.json").read_text())
+UNITS = DEFINITION["UNITS"]
 DEFINED_MORSE_CODES = tuple(DEFINITION["DEFINED_MORSE_CODES"])
 EN_TO_MORSE =  {v: k for k, v in DEFINITION["EN"].items()} 
 
@@ -77,23 +78,23 @@ def create_morse_buffer(code, samplerate, wpm=20, tone=600, word_spacing=1.0, ch
         c = c.upper()
         if c == ' ':
             length += word_unit
-            sequence.append({ 'c': ' ', 'n': -word_unit, 'intermediate': False })
+            sequence.append({ 'c': ' ', 'mc': ' ', 'n': -word_unit, 'intermediate': False })
         else:
             m = EN_TO_MORSE[c]
             for j, mc in enumerate(m):
                 if mc == '.':
                     length += dot_unit
-                    sequence.append({ 'c': m, 'n': dot_unit, 'intermediate': True })
+                    sequence.append({ 'c': m, 'mc': mc, 'n': dot_unit, 'intermediate': True })
                 elif mc == '-':
                     length += dash_unit
-                    sequence.append({ 'c': m, 'n': dash_unit, 'intermediate': True })
+                    sequence.append({ 'c': m, 'mc': mc, 'n': dash_unit, 'intermediate': True })
 
                 if j < (len(m) - 1):
                     length += dot_unit
-                    sequence.append({ 'c': m, 'n': -dot_unit, 'intermediate': True })
+                    sequence.append({ 'c': m, 'mc': '\x1f', 'n': -dot_unit, 'intermediate': True })
 
             length += char_unit
-            sequence.append({ 'c': m, 'n': -char_unit, 'intermediate': False })
+            sequence.append({ 'c': m, 'mc': '', 'n': -char_unit, 'intermediate': False })
 
     length = math.ceil(length + char_unit + 1)
 
@@ -101,6 +102,7 @@ def create_morse_buffer(code, samplerate, wpm=20, tone=600, word_spacing=1.0, ch
     keying = np.zeros(length, dtype=np.uint8)
     codeid = np.zeros(length, dtype=np.uint8)
     recog  = np.zeros(length, dtype=np.uint8)
+    dotda  = np.zeros(length, dtype=np.uint8)
 
     x = 0
     for seq in sequence:
@@ -110,6 +112,7 @@ def create_morse_buffer(code, samplerate, wpm=20, tone=600, word_spacing=1.0, ch
             s = -s
             data[x:x+s] = 0
             codeid[x:x+s] = c
+            dotda[x:x+s] = UNITS.index(seq['mc'])
             x += s
 
             if c != 0 and (not seq['intermediate']):
@@ -118,6 +121,7 @@ def create_morse_buffer(code, samplerate, wpm=20, tone=600, word_spacing=1.0, ch
         else:
             data[x:x+s] = np.sin(np.arange(s, dtype=np.float32) / tone)
             codeid[x:x+s] = c
+            dotda[x:x+s] = UNITS.index(seq['mc'])
             keying[x:x+s] = 255
             x += s
 
@@ -125,7 +129,7 @@ def create_morse_buffer(code, samplerate, wpm=20, tone=600, word_spacing=1.0, ch
             # for f in range(round(e)):
             #    data[x - f] = data[x - f] * (f / e)
 
-    return data, keying, codeid, recog
+    return data, keying, codeid, recog, dotda
 
 def generate_cw_data_with_snr(
         text,
@@ -158,7 +162,7 @@ def generate_cw_data_with_snr(
     start = samplerate * 1
 
     # create morse code data
-    mdata, keying, codeid, recog = ( d[:maxsample-start] for d in create_morse_buffer(text, samplerate=samplerate, wpm=wpm, tone=tone) )
+    mdata, keying, codeid, recog, dotda = ( d[:maxsample-start] for d in create_morse_buffer(text, samplerate=samplerate, wpm=wpm, tone=tone) )
 
     # apply fading to cw
     if fading_strength != 0.0:
@@ -172,10 +176,11 @@ def generate_cw_data_with_snr(
     data[start:start+len(mdata)] += mdata * gain
 
     # create label data
-    label = np.zeros( (3, maxsample), dtype=np.uint8)
+    label = np.zeros( (4, maxsample), dtype=np.uint8)
     label[0,start:start+len(mdata)] = keying
     label[1,start:start+len(mdata)] = codeid
     label[2,start:start+len(mdata)] = recog
+    label[3,start:start+len(mdata)] = dotda
 
     # apply bandpass filter around tone frequency
     if use_bandpass:
@@ -197,8 +202,8 @@ class MorseWavData:
 
         wav, sr = librosa.load(wav_file, sr=None, mono=False)
         y = np.array(Image.open(png_file))
-        key, mid, rht = y[0], y[1], y[2]
-        return cls(wav, sr, key, mid, rht, tone)
+        key, mid, rht, ddt = y[0], y[1], y[2], y[3]
+        return cls(wav, sr, key, mid, rht, ddt, tone)
 
     @classmethod
     def generate(cls, maxlength=30, samplerate=4410, snr=None, wpm=None, fading_strength=0.0, fading_cycle=1.5, fading_init=0):
@@ -225,15 +230,16 @@ class MorseWavData:
                 use_bandpass=False,
                 )
 
-        key, mid, rht = y[0], y[1], y[2]
-        return cls(wav, samplerate, key, mid, rht, tone)
+        key, mid, rht, ddt = y[0], y[1], y[2], y[3]
+        return cls(wav, samplerate, key, mid, rht, ddt, tone)
 
-    def __init__(self, wav, sr, key, mid, rht, tone):
+    def __init__(self, wav, sr, key, mid, rht, ddt, tone):
         self.wav = wav
         self.samplerate = sr
         self.key = key
         self.mid = mid
         self.rht = rht
+        self.ddt = ddt
         self.tone = tone
 
     def get_iq(self, bandpass_width=50, rsr=210):
@@ -248,8 +254,8 @@ class MorseWavData:
         ch0 =  scipy.signal.decimate( wav * np.cos(trange) , down_sampling_factor, ftype="fir")
         ch1 =  scipy.signal.decimate( wav * np.sin(trange) , down_sampling_factor, ftype="fir")
 
-        key, mid, rht = ( d[::down_sampling_factor] for d in (self.key, self.mid, self.rht) )
+        key, mid, rht, ddt = ( d[::down_sampling_factor] for d in (self.key, self.mid, self.rht, self.ddt) )
         l = min(len(ch0), len(key))
-        return (d[:l] for d in (ch0, ch1, key, mid, rht) )
+        return (d[:l] for d in (ch0, ch1, key, mid, rht, ddt) )
 
 
